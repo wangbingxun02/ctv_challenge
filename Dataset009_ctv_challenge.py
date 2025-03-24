@@ -12,7 +12,7 @@ random.seed(10)
 
 
 
-def convert_ctv_challenge(src_data_folder: str, dataset_id=8):
+def convert_ctv_challenge(src_data_folder: str, dataset_id=9):
 
     
 
@@ -36,7 +36,7 @@ def convert_ctv_challenge(src_data_folder: str, dataset_id=8):
 
     train_dir = join(src_data_folder, 'Training')
     test_dir = join(src_data_folder, 'Test')
-    val_dir = join(src_data_folder, 'Val')
+    val_dir = join(src_data_folder, 'Validation')
     case_ids = subdirs(train_dir,join=False)
     case_ts = subdirs(test_dir,join=False)
     case_val = subdirs(val_dir,join=False)
@@ -58,8 +58,7 @@ def convert_ctv_challenge(src_data_folder: str, dataset_id=8):
         shutil.copy(join(val_dir, c, "CTV.nii.gz"), join(labelstr, c + '.nii.gz'))
     for c in patients_test:
         shutil.copy(join(test_dir, c, "image.nii.gz"), join(imagests, c + '_0000.nii.gz'))
-        shutil.copy(join(test_dir, c, "CTV.nii.gz"), join(labelstr, c + '.nii.gz'))
-
+        
     
     generate_dataset_json(
                           out_base, {0: "CT"},
@@ -81,7 +80,7 @@ if __name__ == "__main__":
         type=str,
     )
     parser.add_argument(
-        "-d", "--dataset_id", required=False, type=int, default=100, help="nnU-Net Dataset ID, default: 100"
+        "-d", "--dataset_id", required=False, type=int, default=9, help="nnU-Net Dataset ID, default: 009"
     )
 
     
