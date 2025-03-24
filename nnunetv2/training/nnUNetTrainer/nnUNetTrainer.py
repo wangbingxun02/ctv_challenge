@@ -142,13 +142,13 @@ class nnUNetTrainer(object):
                 if self.is_cascaded else None
 
         ### Some hyperparameters for you to fiddle with
-        self.initial_lr = 1e-2
+        self.initial_lr = 1e-3
         self.weight_decay = 3e-5
         self.oversample_foreground_percent = 0.33
         self.probabilistic_oversampling = False
         self.num_iterations_per_epoch = 250
         self.num_val_iterations_per_epoch = 50
-        self.num_epochs = 1000
+        self.num_epochs = 800
         self.current_epoch = 0
         self.enable_deep_supervision = True
 
@@ -427,11 +427,13 @@ class nnUNetTrainer(object):
     def configure_rotation_dummyDA_mirroring_and_inital_patch_size(self):
         """
         This function is stupid and certainly one of the weakest spots of this implementation. Not entirely sure how we can fix it.
+        伪 2D 数据增强是一种在处理 3D 数据时平衡计算资源和数据多样性的有效方法。通过将 3D 数据转换为 2D 切片进行增强，可以提高模型的训练效率和泛化能力。
         """
         patch_size = self.configuration_manager.patch_size
         dim = len(patch_size)
         # todo rotation should be defined dynamically based on patch size (more isotropic patch sizes = more rotation)
         if dim == 2:
+            # 对于 2D 数据，不进行伪 2D 数据增强
             do_dummy_2d_data_aug = False
             # todo revisit this parametrization
             if max(patch_size) / min(patch_size) > 1.5:
@@ -442,6 +444,7 @@ class nnUNetTrainer(object):
         elif dim == 3:
             # todo this is not ideal. We could also have patch_size (64, 16, 128) in which case a full 180deg 2d rot would be bad
             # order of the axes is determined by spacing, not image size
+            # (max(patch_size) / patch_size[0]) > 3 ，则进行伪 2D 数据增强
             do_dummy_2d_data_aug = (max(patch_size) / patch_size[0]) > ANISO_THRESHOLD
             if do_dummy_2d_data_aug:
                 # why do we rotate 180 deg here all the time? We should also restrict it
@@ -712,6 +715,8 @@ class nnUNetTrainer(object):
         else:
             patch_size_spatial = patch_size
             ignore_axes = None
+
+        # 添加 SpatialTransform 转换，对数据进行空间变换，包括旋转、缩放等操作    
         transforms.append(
             SpatialTransform(
                 patch_size_spatial, patch_center_dist_from_border=0, random_crop=False, p_elastic_deform=0,
@@ -723,7 +728,8 @@ class nnUNetTrainer(object):
 
         if do_dummy_2d_data_aug:
             transforms.append(Convert2DTo3DTransform())
-
+        
+        # 添加一系列随机变换，如高斯噪声、高斯模糊、亮度调整、对比度调整等，每个变换都有一定的应用概率。
         transforms.append(RandomTransform(
             GaussianNoiseTransform(
                 noise_variance=(0, 0.1),
@@ -782,6 +788,9 @@ class nnUNetTrainer(object):
                 p_retain_stats=1
             ), apply_probability=0.3
         ))
+
+
+        # 如果 mirror_axes 不为空，则添加 MirrorTransform 转换，对数据进行镜像操作。
         if mirror_axes is not None and len(mirror_axes) > 0:
             transforms.append(
                 MirrorTransform(
@@ -789,6 +798,7 @@ class nnUNetTrainer(object):
                 )
             )
 
+        # 如果 use_mask_for_norm 不为空且包含 True 值，则添加 MaskImageTransform 转换，使用掩码对数据进行归一化。
         if use_mask_for_norm is not None and any(use_mask_for_norm):
             transforms.append(MaskImageTransform(
                 apply_to_channels=[i for i in range(len(use_mask_for_norm)) if use_mask_for_norm[i]],
@@ -796,6 +806,7 @@ class nnUNetTrainer(object):
                 set_outside_to=0,
             ))
 
+        # 将标签为 -1 的像素值替换为 0
         transforms.append(
             RemoveLabelTansform(-1, 0)
         )
@@ -828,6 +839,7 @@ class nnUNetTrainer(object):
                 )
             )
 
+        # 如果 regions 不为空，则添加 ConvertSegmentationToRegionsTransform 转换，将分割标签转换为区域标签。
         if regions is not None:
             # the ignore label must also be converted
             transforms.append(
@@ -837,6 +849,7 @@ class nnUNetTrainer(object):
                 )
             )
 
+        # 如果 deep_supervision_scales 不为空，则添加 DownsampleSegForDSTransform 转换，对分割标签进行下采样。
         if deep_supervision_scales is not None:
             transforms.append(DownsampleSegForDSTransform(ds_scales=deep_supervision_scales))
 

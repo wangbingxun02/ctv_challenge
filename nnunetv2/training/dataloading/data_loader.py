@@ -69,15 +69,22 @@ class nnUNetDataLoader(DataLoader):
     def _oversample_last_XX_percent(self, sample_idx: int) -> bool:
         """
         determines whether sample sample_idx in a minibatch needs to be guaranteed foreground
+        该方法的作用是根据过采样比例和样本在小批量中的索引，决定是否需要保证该样本包含前景。通过这种方式，可以在训练过程中对前景进行过采样，从而提高模型对前景的识别能力，特别是在前景样本较少的情况下。
         """
         return not sample_idx < round(self.batch_size * (1 - self.oversample_foreground_percent))
 
     def _probabilistic_oversampling(self, sample_idx: int) -> bool:
         # print('YEAH BOIIIIII')
+        """
+        该方法的作用是根据给定的过采样比例，以概率的方式决定是否对当前样本进行前景过采样。通过这种方式，可以在训练过程中随机地增加前景样本的比例，从而提高模型对前景的识别能力，特别是在前景样本较少的情况下。
+        """
         return np.random.uniform() < self.oversample_foreground_percent
 
     def determine_shapes(self):
         # load one case
+        """
+        计算数据和标签的形状
+        """
         data, seg, seg_prev, properties = self._data.load_case(self._data.identifiers[0])
         num_color_channels = data.shape[0]
 
@@ -90,6 +97,9 @@ class nnUNetDataLoader(DataLoader):
 
     def get_bbox(self, data_shape: np.ndarray, force_fg: bool, class_locations: Union[dict, None],
                  overwrite_class: Union[int, Tuple[int, ...]] = None, verbose: bool = False):
+        """
+        根据输入的数据形状、是否强制包含前景、类别位置信息等参数，生成一个用于裁剪数据的边界框
+        """
         # in dataloader 2d we need to select the slice prior to this and also modify the class_locations to only have
         # locations for the given slice
         need_to_pad = self.need_to_pad.copy()
@@ -108,6 +118,7 @@ class nnUNetDataLoader(DataLoader):
 
         # if not force_fg then we can just sample the bbox randomly from lb and ub. Else we need to make sure we get
         # at least one of the foreground classes in the patch
+        # force_fg 为 False 且 self.has_ignore 为 False：边界框的下界会随机采样得到，不保证边界框包含前景。
         if not force_fg and not self.has_ignore:
             bbox_lbs = [np.random.randint(lbs[i], ubs[i] + 1) for i in range(dim)]
             # print('I want a random location')
@@ -119,6 +130,7 @@ class nnUNetDataLoader(DataLoader):
                     warnings.warn('Warning! No annotated pixels in image!')
                     selected_class = None
             elif force_fg:
+                # force_fg 为 True 或者 self.has_ignore 为 True：会根据类别位置信息 class_locations 来选择一个前景类别，然后从该类别的位置中随机选择一个体素，以这个体素为中心生成边界框，从而保证边界框包含前景。
                 assert class_locations is not None, 'if force_fg is set class_locations cannot be None'
                 if overwrite_class is not None:
                     assert overwrite_class in class_locations.keys(), 'desired class ("overwrite_class") does not ' \
